@@ -2,5 +2,11 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "ai-server",
   "compatibility_date": "2025-08-03",
-  "main": "./src/index.tsx"
+  "main": "./src/index.tsx",
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "FRIDAY_API_KEY": "21902918114338451458-124389233",
+  },
 }
