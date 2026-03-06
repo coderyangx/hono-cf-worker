@@ -14,6 +14,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { responseError } from './utils';
 // import { renderer } from './renderer';
 import { availableTools, executeWeatherTool } from './tools/weather-tool-config';
+import { productsRouter } from './routes/products';
 // import dotenv from 'dotenv';
 // dotenv.config();
 // console.log('process.env.FRIDAY_API_KEY: ', process?.env?.FRIDAY_API_KEY);
@@ -71,6 +72,9 @@ app.get('/api', async (c) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// 商品路由
+app.route('/api/products', productsRouter);
 
 // 测试接口
 app.post('/api/agent/test', async (c) => {
