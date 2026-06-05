@@ -11,9 +11,9 @@
     "cf-typegen": "wrangler types --env-interface CloudflareBindings"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^2.0.10",
+    "@ai-sdk/openai": "^3.0.53",
     "@hono/node-server": "^1.14.4",
-    "ai": "^5.0.28",
+    "ai": "^6.0.168",
     "@supabase/supabase-js": "^2.98.0",
     "hono": "^4.7.11",
     "zod": "^3.25.64"
@@ -29,6 +29,6 @@
     "wrangler": "^4.17.0"
   },
   "resolutions": {
-    "ai": "5.x"
+    "ai": "6.x"
   }
 }

@@ -7,7 +7,7 @@ import { serve } from '@hono/node-server';
 // import { stream as honoStream } from 'hono/streaming';
 import { z } from 'zod';
 // import { zValidator } from '@hono/zod-validator';
-import { streamText, generateText, generateObject, tool } from 'ai';
+import { streamText, generateText, generateObject, tool, Output } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 // import { google } from '@ai-sdk/google';
 // import { GoogleGenAI } from '@google/genai';
@@ -24,13 +24,17 @@ const app = new Hono<{ Bindings: Env }>();
 // @ai-sdk/openai v2 默认使用 Responses API，需通过 .chat() 强制走 chat/completions 协议
 // 内网网关 aigc.sankuai.com 只兼容 chat/completions，不支持 Responses API
 const openaiProvider = createOpenAI({
-  apiKey: '21902918114338451458',
-  baseURL: 'https://aigc.sankuai.com/v1/openai/native',
+  baseURL: 'https://api.codeturbo.ai/v1',
+  apiKey: 'sk-b0376b7c81cf352ad3ec997d721e5a7174f302b6479d0a09fc2609d095238837',
+  // apiKey: '21902918114338451458',
+  // baseURL: 'https://aigc.sankuai.com/v1/openai/native',
   // compatibility: 'compatible', // 非官方 OpenAI 端点，禁用严格兼容性检查
 });
 
+const defaultModel = 'gpt-5.4-mini';
+
 // 统一使用 chat 方式调用，对应 /chat/completions 端点
-const getModel = (model: string) => openaiProvider.chat(model);
+const getModel = (modelId = defaultModel) => openaiProvider.chat(modelId);
 
 // const getModel = createOpenAI({
 //   apiKey: '',
@@ -51,6 +55,15 @@ app.use(
   }),
 );
 
+// 全局异常处理
+app.onError((err, c) => {
+  console.error({ err }, '[app] 500 Internal Server Error');
+  return c.json(responseError(500, err.message));
+});
+
+// 404 处理
+app.notFound((c) => c.text('404 Not Found', 404));
+
 // app.use(renderer);
 app.get('/', (c) => {
   return c.render('<h2>Hello HTML</h2>');
@@ -59,7 +72,7 @@ app.get('/', (c) => {
 // API 路由
 app.get('/api', async (c) => {
   // const response = await ai.models.generateContent({
-  //   model: 'gemini-2.5-flash',
+  //   model: 'gpt-5.4-mini',
   //   contents: '你是谁',
   // });
   // console.log(response.text);
@@ -68,13 +81,13 @@ app.get('/api', async (c) => {
     code: 200,
     status: 'ok',
     message: 'ai-agent 测试成功',
-    env: c.env?.FRIDAY_API_KEY || '无法获取 env',
+    env: c.env || '无法获取 env',
     timestamp: new Date().toISOString(),
   });
 });
 
 // 商品路由
-app.route('/api/products', productsRouter);
+app.route('/api/product', productsRouter);
 
 // 测试接口
 app.post('/api/agent/test', async (c) => {
@@ -87,6 +100,7 @@ app.post('/api/agent/test', async (c) => {
   } else {
     return c.json({ error: 'Invalid request format' }, 400);
   }
+  console.log('[测试接口正常]', userContent);
 
   return c.json({
     role: 'assistant',
@@ -99,8 +113,7 @@ app.post('/api/agent/stream', async (c) => {
     const { messages } = await c.req.json();
     // console.log('流式输出: ', messages);
     const result = streamText({
-      // model: getModel('gpt-4o-mini'),
-      model: getModel('gemini-2.5-flash'),
+      model: getModel(),
       messages: messages,
       onChunk: (chunk) => {
         // @ts-ignore
@@ -114,15 +127,14 @@ app.post('/api/agent/stream', async (c) => {
     return result.toTextStreamResponse(); // 纯文本流响应
     // return honoStream(c, (s) => s.pipe(result.toDataStream()));
   } catch (err) {
-    responseError(c, err, 'ai-stream 接口调用失败');
+    return c.json(responseError(500, err?.message || 'ai-stream 接口调用失败'));
   }
 });
 app.post('/api/agent/gemini-stream', async (c) => {
   const { messages } = await c.req.json();
   // console.log('流式输出: ', messages);
   const result = streamText({
-    // model: getModel('gpt-4o-mini'),
-    model: getModel('gemini-2.5-flash'),
+    model: getModel(),
     messages: messages,
     onChunk: (chunk) => {
       console.log('hono onChunk: ', chunk.chunk);
@@ -138,8 +150,7 @@ app.post('/api/agent/chat', async (c) => {
     const { messages } = await c.req.json();
     console.log('开始处理chat: ', messages);
     const result = await generateText({
-      // model: getModel('gpt-4o-mini'),
-      model: getModel('gemini-2.5-flash'),
+      model: getModel(),
       messages: messages,
     });
     console.log('chat 响应成功: ', result.text, 'result', result);
@@ -148,7 +159,7 @@ app.post('/api/agent/chat', async (c) => {
     });
   } catch (err) {
     console.error('chat 请求失败: ', err);
-    responseError(c, err, 'ai-chat 接口调用失败');
+    return c.json(responseError(500, err?.message || 'ai-chat 接口调用失败'));
   }
 });
 
@@ -156,11 +167,10 @@ app.get('/api/agent/recommend', async (c) => {
   const prompt = c.req.query('prompt');
   // const { messages } = await c.req.json();
   console.log('推荐请求: ', prompt);
-  const result = await generateObject({
+  const result = await generateText({
     // Authorization: '21902918114338451458',
     // const result = await generateText({
-    model: getModel('gpt-4o-mini'),
-    // model: getModel('LongCat-Flash-Chat'),
+    model: getModel(),
     // temperature: 0.3,
     system: `
       你是一个电影推荐系统，请严格按照以下规则处理用户请求：
@@ -171,25 +181,37 @@ app.get('/api/agent/recommend', async (c) => {
       ## 判断标准
       有效请求示例：推荐科幻电影、想看喜剧片、有什么好看的动作片、推荐张艺谋的电影
       无效请求示例：天气怎么样、帮我写代码、今天吃什么、数学题目等`,
-    prompt: (prompt as string) || '推荐几个高分科幻电影', //messages[messages.length - 1].content,
-    schema: z.object({
-      isValidRequest: z.boolean().describe('是否是有效的电影请求'),
-      message: z.string().describe('回复消息，如果无效请求则提示用户'),
-      movies: z
-        .array(
-          z.object({
-            title: z.string().describe('电影名称'),
-            description: z.string().describe('电影描述'),
-            rating: z.number().describe('电影评分'),
-            year: z.string().optional().describe('上映年份'),
-          }),
-        )
-        .optional()
-        .describe('推荐的电影列表，仅在有效请求时提供'),
-    }),
+    // prompt: (prompt as string) || '推荐几个高分科幻电影', //messages[messages.length - 1].content,
+    messages: [
+      {
+        role: 'user',
+        content: (prompt as string) || '推荐几个高分科幻电影',
+      },
+    ],
+    // output: Output.object({
+    //   schema: z.object({
+    //     isValidRequest: z.boolean().describe('是否是有效的电影请求'),
+    //     message: z.string().describe('回复消息，如果无效请求则提示用户'),
+    //     movies: z
+    //       .array(
+    //         z.object({
+    //           title: z.string().describe('电影名称'),
+    //           description: z.string().describe('电影描述'),
+    //           rating: z.number().describe('电影评分'),
+    //           year: z.string().optional().describe('上映年份'),
+    //         }),
+    //       )
+    //       .optional()
+    //       .describe('推荐的电影列表，仅在有效请求时提供'),
+    //   }),
+    // }),
   });
-  console.log('推荐结果: ', result);
-  return c.json(result.object || {});
+  console.log('推荐结果: ', result.output);
+  return c.json({
+    isValidRequest: true,
+    message: result.output || '暂无数据',
+    movies: [],
+  });
 });
 
 // 支持工具调用的聊天接口
@@ -215,7 +237,7 @@ app.post('/api/agent/chat-with-tools', async (c) => {
     const messagesWithSystem = [systemMessage, ...messages];
 
     const result = await generateText({
-      model: getModel('gemini-2.5-flash'),
+      model: getModel(),
       messages: messagesWithSystem,
       tools: {
         getWeather: tool({
@@ -268,21 +290,21 @@ app.post('/api/agent/chat-with-tools', async (c) => {
     });
   } catch (err) {
     console.error('工具调用聊天失败: ', err);
-    responseError(c, err, '工具调用聊天接口失败');
+    return c.json(responseError(500, err?.message || '工具调用聊天接口失败'));
   }
 });
 
 // worker 启动 报错
 export default app;
 
-// hono 单独启动 可以
+// hono 可以单独启动 npm run dev:hono
 // serve(
 //   {
 //     fetch: app.fetch,
-//     port: 3001,
+//     port: 3000,
 //   },
 //   (info) => {
-//     console.log(`Hono Server 正在运行 http://localhost:${info.port}`);
+//     console.log(`[==Hono Server 正在运行==] http://localhost:${info.port} `);
 //   },
 // );
 

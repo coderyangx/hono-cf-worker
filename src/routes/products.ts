@@ -5,6 +5,27 @@ import { responseSupabaseData } from '../utils';
 const TABLE_PRODUCTS = 'products';
 const TABLE_ORDERS = 'orders';
 
+export interface Product {
+  id: number;
+  created_at: string;
+  product: string;
+  productName: string;
+  productDesc: string;
+  price: number;
+}
+
+export interface CreateProductData {
+  product: string;
+  productName: string;
+  productDesc: string;
+  price: number;
+}
+
+// 编辑
+type EditProductData = Partial<Product>;
+
+export const productsRouter = new Hono();
+
 const getProducts: Handler = async (c) => {
   const res = await supabase.from(TABLE_PRODUCTS).select('*');
   console.log('获取商品列表', res);
@@ -12,14 +33,14 @@ const getProducts: Handler = async (c) => {
 };
 
 // 增加
-export const createProduct: Handler = async (c) => {
+const createProduct: Handler = async (c) => {
   const { product } = await c.req.json<CreateProductData>();
   const res = await supabase.from(TABLE_PRODUCTS).insert([product]).select().single();
   return responseSupabaseData(c, res);
 };
 
 // 删除
-export const deleteProduct: Handler = async (c) => {
+const deleteProduct: Handler = async (c) => {
   const { id } = c.req.param();
   console.log('删除商品 id', id);
   if (!id) return c.json({ error: '缺少商品id' }, 400);
@@ -28,10 +49,11 @@ export const deleteProduct: Handler = async (c) => {
   if (error) {
     throw new Error(error.message);
   }
+  return c.json({ code: 200, message: '删除成功' });
 };
 
 // 修改
-export const updateProduct: Handler = async (c) => {
+const updateProduct: Handler = async (c) => {
   const { id, updateProduct } = await c.req.json();
 
   const res = await supabase
@@ -44,7 +66,7 @@ export const updateProduct: Handler = async (c) => {
 };
 
 // 对商品按价格排序 + 对商品按照价格范围筛选
-export const getProductsAndFilter: Handler = async (c) => {
+const getProductsAndFilter: Handler = async (c) => {
   const { sortby, filters } = await c.req.json<{
     sortby?: any;
     filters?: { field: string; method: string; value: string | number }[];
@@ -73,29 +95,8 @@ export const getOrders: Handler = async (c) => {
   return responseSupabaseData(c, res);
 };
 
-export const productsRouter = new Hono();
-
 productsRouter.get('/list', getProducts);
 productsRouter.post('/add', createProduct);
 productsRouter.post('/delete/:id', deleteProduct);
 productsRouter.post('/update', updateProduct);
 productsRouter.post('/filter', getProductsAndFilter);
-
-export interface Product {
-  id: number;
-  created_at: string;
-  product: string;
-  productName: string;
-  productDesc: string;
-  price: number;
-}
-
-export interface CreateProductData {
-  product: string;
-  productName: string;
-  productDesc: string;
-  price: number;
-}
-
-// 编辑
-type EditProductData = Partial<Product>;
